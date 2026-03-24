@@ -45,34 +45,30 @@ self.addEventListener('fetch', (e) => {
     });
 
     async function testInception() {
-      const code = document.getElementById('swCode').value;
-      const controller = navigator.serviceWorker.controller;
+  const code = document.getElementById('swCode').value;
 
-      // 2. Send the code to the Parent SW
-      const messageChannel = new MessageChannel();
-      controller.postMessage({ 
-        type: 'REGISTER_VIRTUAL_SW', 
-        code: code 
-      }, [messageChannel.port2]);
+  // 1. Create a "File" in memory from the textarea string
+  const blob = new Blob([code], { type: 'text/javascript' });
+  
+  // 2. Create a URL for that file
+  // This will look like: blob:https://mochaharpy.github.io/uuid-here
+  const blobUrl = URL.createObjectURL(blob);
 
-      messageChannel.port1.onmessage = async (event) => {
-        if (event.data === 'READY') {
-          try {
-            // 3. Register the virtual file path
-            // Note: we set the scope explicitly to /test/
-            const reg = await navigator.serviceWorker.register('virtual-worker.js', {
-              scope: '/test/'
-            });
-            
-            console.log('SUCCESS:', reg);
-            alert('Virtual SW Registered! Check your DevTools Console (F12).');
-          } catch (err) {
-            console.error('Registration failed:', err);
-            alert('Failed: ' + err.message);
-          }
-        }
-      };
-    }
+  try {
+    // 3. Register the Blob URL
+    // NOTE: For Blobs, you MUST specify the scope because 
+    // the browser can't guess the folder from a 'blob:' prefix
+    const reg = await navigator.serviceWorker.register(blobUrl, {
+      scope: '/test/' 
+    });
+
+    console.log('Inception Success via Blob!', reg);
+    alert('Virtual SW Registered via Blob URL!');
+  } catch (err) {
+    console.error('Blob Registration failed:', err);
+    alert('Failed: ' + err.message);
+  }
+}
   </script>
 </body>
 </html>
