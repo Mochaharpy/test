@@ -1,0 +1,1 @@
+importScripts('./virtual-logic.js');
