@@ -15,7 +15,7 @@ self.addEventListener('message', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
-  console.log(url)
+  console.log(url.toString())
   // We intercept a specific virtual name inside the /test/ path
   if (url.pathname.endsWith('/test/virtual-worker.js')) {
     event.respondWith(
