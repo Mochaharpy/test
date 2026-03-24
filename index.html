@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>SW Inception Test (/test/)</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; line-height: 1.5; }
+    textarea { width: 100%; font-family: monospace; background: #f4f4f4; padding: 10px; }
+    .status { padding: 10px; margin: 10px 0; border-radius: 4px; }
+    .ready { background: #e7f3ff; color: #004085; }
+  </style>
+</head>
+<body>
+  <h1>Service Worker Inception</h1>
+  <p>Location: <code>/test/</code></p>
+
+  <div id="setupStatus" class="status">Checking Parent SW...</div>
+
+  <textarea id="swCode" rows="12">
+self.addEventListener('install', (e) => {
+  console.log('VIRTUAL WORKER: Installed successfully!');
+  self.skipWaiting();
+});
+
+self.addEventListener('fetch', (e) => {
+  console.log('VIRTUAL WORKER intercepted a request for:', e.request.url);
+});
+  </textarea>
+  
+  <br><br>
+  <button id="regBtn" onclick="testInception()" disabled>Register Virtual Worker</button>
+
+  <script>
+    const statusEl = document.getElementById('setupStatus');
+    const btn = document.getElementById('regBtn');
+
+    // 1. Initial Registration of the Parent
+    navigator.serviceWorker.register('sw.js').then(() => {
+      if (navigator.serviceWorker.controller) {
+        statusEl.textContent = "✅ Parent SW is active and controlling this page.";
+        statusEl.className = "status ready";
+        btn.disabled = false;
+      } else {
+        statusEl.textContent = "⚠️ Parent SW registered but not controlling. Please REFRESH the page.";
+      }
+    });
+
+    async function testInception() {
+      const code = document.getElementById('swCode').value;
+      const controller = navigator.serviceWorker.controller;
+
+      // 2. Send the code to the Parent SW
+      const messageChannel = new MessageChannel();
+      controller.postMessage({ 
+        type: 'REGISTER_VIRTUAL_SW', 
+        code: code 
+      }, [messageChannel.port2]);
+
+      messageChannel.port1.onmessage = async (event) => {
+        if (event.data === 'READY') {
+          try {
+            // 3. Register the virtual file path
+            // Note: we set the scope explicitly to /test/
+            const reg = await navigator.serviceWorker.register('virtual-worker.js', {
+              scope: '/test/'
+            });
+            
+            console.log('SUCCESS:', reg);
+            alert('Virtual SW Registered! Check your DevTools Console (F12).');
+          } catch (err) {
+            console.error('Registration failed:', err);
+            alert('Failed: ' + err.message);
+          }
+        }
+      };
+    }
+  </script>
+</body>
+</html>
