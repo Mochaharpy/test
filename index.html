@@ -46,28 +46,26 @@ self.addEventListener('fetch', (e) => {
 
     async function testInception() {
   const code = document.getElementById('swCode').value;
+  const controller = navigator.serviceWorker.controller;
 
-  // 1. Create a "File" in memory from the textarea string
-  const blob = new Blob([code], { type: 'text/javascript' });
-  
-  // 2. Create a URL for that file
-  // This will look like: blob:https://mochaharpy.github.io/uuid-here
-  const blobUrl = URL.createObjectURL(blob);
+  // 1. Give the code to the Parent SW
+  const chan = new MessageChannel();
+  controller.postMessage({ type: 'SET_CODE', code: code }, [chan.port2]);
 
-  try {
-    // 3. Register the Blob URL
-    // NOTE: For Blobs, you MUST specify the scope because 
-    // the browser can't guess the folder from a 'blob:' prefix
-    const reg = await navigator.serviceWorker.register(blobUrl, {
-      scope: '/test/' 
-    });
-
-    console.log('Inception Success via Blob!', reg);
-    alert('Virtual SW Registered via Blob URL!');
-  } catch (err) {
-    console.error('Blob Registration failed:', err);
-    alert('Failed: ' + err.message);
-  }
+  chan.port1.onmessage = async () => {
+    try {
+      // 2. Register the PERMANENT bridge file.
+      // The browser is happy because it's a real HTTPS file.
+      const reg = await navigator.serviceWorker.register('bridge-sw.js', {
+        scope: '/test/'
+      });
+      
+      console.log('Inception Success!', reg);
+      alert('Nested SW Active!');
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  };
 }
   </script>
 </body>
