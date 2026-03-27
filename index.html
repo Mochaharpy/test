@@ -1,150 +1,81 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SW Inception Terminal</title>
+    <title>Static SW IDE</title>
     <style>
-        body { font-family: sans-serif; background: #1a1a1a; color: #eee; padding: 20px; }
-        h2 { color: #00ffcc; }
-        textarea { 
-            width: 100%; height: 200px; 
-            font-family: monospace; background: #2a2a2a; 
-            color: #00ff00; border: 1px solid #444; padding: 10px;
-            margin-bottom: 10px;
-        }
-        button {
-            padding: 10px 20px; font-weight: bold; cursor: pointer;
-            background: #00ffcc; border: none; color: #1a1a1a; border-radius: 4px;
-        }
-        button:disabled { background: #555; cursor: not-allowed; }
-        #console {
-            background: #000; color: #0f0; padding: 15px;
-            font-family: 'Courier New', monospace; font-size: 14px;
-            border-left: 5px solid #00ffcc; height: 250px;
-            overflow-y: auto; white-space: pre-wrap; margin-top: 20px;
-        }
-        .ping-result {
-            margin-top: 20px; padding: 15px; background: #333;
-            border: 2px dashed #00ffcc; display: none;
-        }
+        body { font-family: sans-serif; padding: 20px; background: #1e1e1e; color: white; }
+        textarea { width: 100%; height: 300px; background: #2d2d2d; color: #9cdcfe; border: 1px solid #444; padding: 10px; font-family: monospace; }
+        button { padding: 10px 20px; background: #007acc; color: white; border: none; cursor: pointer; margin-top: 10px; }
+        #status { margin-top: 10px; color: #4ec9b0; }
+        .preview { margin-top: 20px; padding: 10px; border: 1px solid #444; background: #333; }
     </style>
 </head>
 <body>
-
-    <h2>SW Inception Terminal</h2>
-    <p>1. Edit the <b>Nested Service Worker</b> code below:</p>
+    <h1>Mini SW IDE</h1>
+    <p>Write your fetch handler below. It must return a <code>Response</code>.</p>
     
-    <textarea id="swCode">
-self.addEventListener('install', e => {
-    console.log('Nested SW: Installing...');
-    self.skipWaiting();
-});
+    <textarea id="code">
+// Intercept /api/hello
+if (event.request.url.endsWith('/api/hello')) {
+  return new Response(JSON.stringify({ message: "Hello from the User Worker!" }), {
+    headers: { 'Content-Type': 'application/json' }
+  });
+}
 
-self.addEventListener('activate', e => {
-    console.log('Nested SW: Activated!');
-    self.clients.claim();
-});
+return new Response("Fallback response for other /api/ calls");</textarea>
 
-self.addEventListener('fetch', (event) => {
-    // This is the magic part: if we fetch this URL, the nested worker handles it
-    if (event.request.url.includes('ping-inception')) {
-        event.respondWith(new Response(
-            '<h1 style="color:red">INCEPTION SUCCESS!</h1><p>Served by the Virtual Worker</p>', 
-            { headers: { 'Content-Type': 'text/html' } }
-        ));
-    }
-});</textarea>
+    <br>
+    <button onclick="saveAndRun()">Save & Apply Logic</button>
+    <div id="status">Ready.</div>
 
-    <button id="regBtn" onclick="runInception()" disabled>Register Nested Worker</button>
-    <button id="testBtn" onclick="checkNested()" style="display:none; background:#ffcc00;">Test Nested Ping</button>
-
-    <div id="console">Initializing System...</div>
-    
-    <div id="resultArea" class="ping-result"></div>
+    <hr>
+    <h3>Test Your Worker</h3>
+    <button onclick="testFetch()">Fetch /api/hello</button>
+    <div id="output" class="preview">Response will appear here...</div>
 
     <script>
-        const terminal = document.getElementById('console');
-        const regBtn = document.getElementById('regBtn');
-        const testBtn = document.getElementById('testBtn');
-        const resultArea = document.getElementById('resultArea');
+        const DB_NAME = 'IDE_Storage';
+        const STORE_NAME = 'scripts';
 
-        function log(msg) {
-            const time = new Date().toLocaleTimeString().split(' ')[0];
-            terminal.innerHTML += `[${time}] ${msg}\n`;
-            terminal.scrollTop = terminal.scrollHeight;
-        }
-
-        // --- STEP 1: Register Parent SW ---
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js').then(reg => {
-                if (navigator.serviceWorker.controller) {
-                    log("✅ PARENT SW: Active and controlling page.");
-                    regBtn.disabled = false;
-                } else {
-                    log("⚠️ PARENT SW: Detected but not controlling yet.");
-                    log("👉 PLEASE REFRESH THE PAGE to give Parent control.");
-                }
-            }).catch(err => {
-                log("❌ PARENT ERROR: " + err.message);
-            });
-        }
-
-        // --- STEP 2: Send code to Parent and Register Bridge ---
-        async function runInception() {
-            log("Sending code to Parent SW...");
-            const code = document.getElementById('swCode').value;
-            
-            if (!navigator.serviceWorker.controller) {
-                log("❌ ABORT: No Parent SW controller found. Refresh!");
-                return;
+        // Initialize DB and Service Worker
+        async function init() {
+            if ('serviceWorker' in navigator) {
+                await navigator.serviceWorker.register('sw.js');
+                document.getElementById('status').innerText = "Service Worker Registered.";
             }
+        }
 
-            const messageChannel = new MessageChannel();
-            navigator.serviceWorker.controller.postMessage({ 
-                type: 'SET_CODE', 
-                code: code 
-            }, [messageChannel.port2]);
-
-            messageChannel.port1.onmessage = async (event) => {
-                if (event.data === 'READY') {
-                    log("✅ Parent SW confirmed receipt of code.");
-                    log("Registering 'bridge-sw.js'...");
-
-                    try {
-                        // Use a timestamp to force the browser to re-check the script
-                        const registration = await navigator.serviceWorker.register('bridge-sw.js?t=' + Date.now(), {
-                            scope: '/test/'
-                        });
-                        log("🎉 NESTED SW: Registered successfully!");
-                        log("Waiting 3 seconds for activation logic...");
-                        
-                        setTimeout(() => {
-                            log("System Ready. Click 'Test Nested Ping'.");
-                            testBtn.style.display = 'inline-block';
-                        }, 3000);
-                    } catch (err) {
-                        log("❌ NESTED ERROR: " + err.message);
-                    }
-                }
+        async function saveAndRun() {
+            const code = document.getElementById('code').value;
+            
+            // Save to IndexedDB
+            const request = indexedDB.open(DB_NAME, 1);
+            request.onupgradeneeded = (e) => e.target.result.createObjectStore(STORE_NAME);
+            request.onsuccess = (e) => {
+                const db = e.target.result;
+                const transaction = db.transaction(STORE_NAME, 'readwrite');
+                transaction.objectStore(STORE_NAME).put(code, 'user-sw-logic');
+                transaction.oncomplete = () => {
+                    document.getElementById('status').innerText = "Logic Updated! (Refreshing Worker...)";
+                    // Force refresh by reloading the page or sending a message
+                    location.reload(); 
+                };
             };
         }
 
-        // --- STEP 3: Test if the Nested Worker is catching fetches ---
-        function checkNested() {
-            log("Attempting to fetch 'ping-inception'...");
-            
-            fetch('ping-inception')
-                .then(response => response.text())
-                .then(html => {
-                    resultArea.style.display = 'block';
-                    resultArea.innerHTML = "<b>Response from Worker:</b><br>" + html;
-                    log("🎊 FETCH SUCCESS: Nested worker responded!");
-                })
-                .catch(err => {
-                    log("❌ FETCH FAILED: Request went to network instead of worker.");
-                });
+        async function testFetch() {
+            const out = document.getElementById('output');
+            out.innerText = "Fetching...";
+            try {
+                const res = await fetch('/api/hello');
+                const text = await res.text();
+                out.innerText = text;
+            } catch (e) {
+                out.innerText = "Fetch failed. Is the SW running?";
+            }
         }
+
+        init();
     </script>
 </body>
 </html>
