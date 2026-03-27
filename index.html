@@ -1,81 +1,92 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Static SW IDE</title>
+    <title>SW test</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; background: #1e1e1e; color: white; }
-        textarea { width: 100%; height: 300px; background: #2d2d2d; color: #9cdcfe; border: 1px solid #444; padding: 10px; font-family: monospace; }
-        button { padding: 10px 20px; background: #007acc; color: white; border: none; cursor: pointer; margin-top: 10px; }
-        #status { margin-top: 10px; color: #4ec9b0; }
-        .preview { margin-top: 20px; padding: 10px; border: 1px solid #444; background: #333; }
+        body { font-family: monospace; background: #121212; color: #aaa; padding: 20px; }
+        textarea { 
+            width: 100%; height: 350px; 
+            background: #1e1e1e; color: #d4d4d4; 
+            border: 1px solid #333; padding: 10px; font-size: 14px;
+        }
+        button { background: #3c3c3c; color: white; border: none; padding: 10px 20px; cursor: pointer; }
+        button:hover { background: #505050; }
+        #log { margin-top: 20px; color: #9cdcfe; white-space: pre-wrap; border-top: 1px solid #333; padding-top: 10px; }
     </style>
 </head>
 <body>
-    <h1>Mini SW IDE</h1>
-    <p>Write your fetch handler below. It must return a <code>Response</code>.</p>
+    <h2>Service Worker Sandbox</h2>
+    <p>Write a full Service Worker script below:</p>
     
-    <textarea id="code">
-// Intercept /api/hello
-if (event.request.url.endsWith('/api/hello')) {
-  return new Response(JSON.stringify({ message: "Hello from the User Worker!" }), {
-    headers: { 'Content-Type': 'application/json' }
-  });
-}
+    <textarea id="editor">
+self.addEventListener('install', (event) => {
+  console.log('User SW: Installing...');
+});
 
-return new Response("Fallback response for other /api/ calls");</textarea>
+self.addEventListener('fetch', (event) => {
+  if (event.request.url.includes('test-api')) {
+    event.respondWith(
+      new Response('{"status": "Real SW Interception!"}', {
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+  }
+});</textarea>
 
     <br>
-    <button onclick="saveAndRun()">Save & Apply Logic</button>
-    <div id="status">Ready.</div>
-
-    <hr>
-    <h3>Test Your Worker</h3>
-    <button onclick="testFetch()">Fetch /api/hello</button>
-    <div id="output" class="preview">Response will appear here...</div>
+    <button onclick="deployWorker()">Deploy & Register</button>
+    <button onclick="testRequest()">Test Fetch</button>
+    
+    <div id="log">Logs will appear here...</div>
 
     <script>
-        const DB_NAME = 'IDE_Storage';
-        const STORE_NAME = 'scripts';
+        let registration = null;
 
-        // Initialize DB and Service Worker
-        async function init() {
-            if ('serviceWorker' in navigator) {
-                await navigator.serviceWorker.register('sw.js');
-                document.getElementById('status').innerText = "Service Worker Registered.";
-            }
-        }
-
-        async function saveAndRun() {
-            const code = document.getElementById('code').value;
+        async function deployWorker() {
+            const code = document.getElementById('editor').value;
             
-            // Save to IndexedDB
-            const request = indexedDB.open(DB_NAME, 1);
-            request.onupgradeneeded = (e) => e.target.result.createObjectStore(STORE_NAME);
-            request.onsuccess = (e) => {
-                const db = e.target.result;
-                const transaction = db.transaction(STORE_NAME, 'readwrite');
-                transaction.objectStore(STORE_NAME).put(code, 'user-sw-logic');
-                transaction.oncomplete = () => {
-                    document.getElementById('status').innerText = "Logic Updated! (Refreshing Worker...)";
-                    // Force refresh by reloading the page or sending a message
-                    location.reload(); 
-                };
-            };
-        }
+            // 1. Create a Blob from the user's string code
+            const blob = new Blob([code], { type: 'application/javascript' });
+            const blobUrl = URL.createObjectURL(blob);
 
-        async function testFetch() {
-            const out = document.getElementById('output');
-            out.innerText = "Fetching...";
-            try {
-                const res = await fetch('/api/hello');
-                const text = await res.text();
-                out.innerText = text;
-            } catch (e) {
-                out.innerText = "Fetch failed. Is the SW running?";
+            // 2. Register the "Master" worker if not already registered
+            if (!registration) {
+                registration = await navigator.serviceWorker.register('sw.js');
+                // Wait for it to be ready
+                await navigator.serviceWorker.ready;
+            }
+
+            // 3. Send the Blob URL to the Master Worker
+            // This is the "Magic" part: importScripts can take a Blob URL!
+            if (navigator.serviceWorker.controller) {
+                navigator.serviceWorker.controller.postMessage({
+                    type: 'INSTALL_USER_CODE',
+                    url: blobUrl
+                });
+                log("Code sent to Master Worker. Try fetching now.");
+            } else {
+                log("Worker not controlled yet. Refreshing...");
+                location.reload();
             }
         }
 
-        init();
+        async function testRequest() {
+            log("Fetching /test-api...");
+            try {
+                const res = await fetch('/test-api');
+                const data = await res.text();
+                log("Result: " + data);
+            } catch (e) {
+                log("Error: " + e);
+            }
+        }
+
+        function log(msg) {
+            document.getElementById('log').textContent += `\n[${new Date().toLocaleTimeString()}] ${msg}`;
+        }
+
+        // Register on load
+        window.onload = () => navigator.serviceWorker.register('sw.js');
     </script>
 </body>
 </html>
