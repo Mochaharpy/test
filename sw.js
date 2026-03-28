@@ -13,3 +13,13 @@ self.addEventListener('message', (event) => {
     }
   }
 });
+self.addEventListener('fetch', (event) => {
+  if (event.request.url.has("sw")) {
+    event.respondWith(
+     new Response(
+       `self.addEventListener('install',e=>self.skipWaiting());self.addEventListener('activate',e=>e.waitUntil(clients.claim()));self.addEventListener('fetch',e=>e.request.url.includes('test-thing')&&e.respondWith(new Response('working')));`
+                 "Content-Type": "application/javascript"
+                 ) 
+    )
+  }
+})
